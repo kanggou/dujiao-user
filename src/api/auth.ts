@@ -10,6 +10,8 @@ export const userAuthAPI = {
     telegramLogin: (data: TelegramAuthPayload) => userApi.post('/auth/telegram/login', data),
     telegramMiniAppLogin: (data: TelegramMiniAppAuthPayload) =>
         userApi.post('/auth/telegram/miniapp/login', data),
+    discordConfig: () => userApi.get('/auth/discord/config'),
+    discordLogin: (data: { code: string }) => userApi.post('/auth/discord/login', data),
     forgotPassword: (data: any) => userApi.post('/auth/forgot-password', data),
 }
 

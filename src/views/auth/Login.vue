@@ -269,6 +269,25 @@
               {{ attemptingMiniAppLogin ? t('auth.login.telegramMiniAppLoggingIn') : t('auth.login.telegramMiniAppHint') }}
             </p>
           </div>
+
+          <div v-if="discordEnabled" class="space-y-3 pt-1">
+            <div class="flex items-center gap-3 text-[11px] uppercase tracking-[0.12em] theme-text-muted">
+              <span class="h-px flex-1 border-t border-gray-200/80 dark:border-white/10"></span>
+              <span>{{ t('auth.login.orContinueWith') }}</span>
+              <span class="h-px flex-1 border-t border-gray-200/80 dark:border-white/10"></span>
+            </div>
+            <button
+              type="button"
+              class="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white"
+              style="background-color:#5865F2"
+              @click="startDiscordLogin"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.2 14.2 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028ZM8.02 15.331c-1.182 0-2.157-1.085-2.157-2.419 0-1.333.956-2.418 2.157-2.418 1.21 0 2.176 1.094 2.157 2.418 0 1.334-.956 2.419-2.157 2.419Zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.418 2.157-2.418 1.21 0 2.176 1.094 2.157 2.418 0 1.334-.946 2.419-2.157 2.419Z"/>
+              </svg>
+              {{ discordLoggingIn ? t('auth.login.discordLoggingIn') : t('auth.login.discordLogin') }}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -294,6 +313,7 @@ import { useAppStore } from '../../stores/app'
 import { useTelegramMiniAppStore } from '../../stores/telegramMiniApp'
 import { buildTelegramMiniAppEntryLink, isTelegramUrlEnvironment, openTelegramCompatibleLink } from '../../utils/telegramMiniApp'
 import type { CaptchaPayload, TelegramAuthPayload } from '../../api'
+import { userAuthAPI } from '../../api/auth'
 import ImageCaptcha from '../../components/captcha/ImageCaptcha.vue'
 import TurnstileCaptcha from '../../components/captcha/TurnstileCaptcha.vue'
 import FormField from '../../components/FormField.vue'
@@ -329,6 +349,46 @@ formValidation.addRule('email', formValidation.emailRule())
 formValidation.addRule('password', formValidation.requiredRule())
 const error = ref('')
 const info = ref('')
+// ===== Discord OAuth 登录 =====
+const discordEnabled = ref(false)
+const discordClientId = ref('')
+const discordRedirectUri = ref('')
+const discordScope = ref('identify')
+const discordLoggingIn = ref(false)
+
+const loadDiscordConfig = async () => {
+  try {
+    const resp = await userAuthAPI.discordConfig()
+    const data = resp.data?.data || {}
+    discordEnabled.value = !!data.enabled
+    discordClientId.value = data.client_id || ''
+    discordRedirectUri.value = data.redirect_uri || ''
+    discordScope.value = data.scope || 'identify'
+  } catch {
+    discordEnabled.value = false
+  }
+}
+
+const startDiscordLogin = () => {
+  if (!discordEnabled.value || !discordClientId.value || !discordRedirectUri.value) {
+    error.value = t('auth.login.discordLoginFailed')
+    return
+  }
+  discordLoggingIn.value = true
+  const state = Math.random().toString(36).slice(2) + Date.now().toString(36)
+  sessionStorage.setItem('discord_oauth_state', state)
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/me/orders'
+  sessionStorage.setItem('discord_oauth_redirect', redirect)
+  const params = new URLSearchParams({
+    client_id: discordClientId.value,
+    redirect_uri: discordRedirectUri.value,
+    response_type: 'code',
+    scope: discordScope.value,
+    state,
+  })
+  window.location.href = `https://discord.com/oauth2/authorize?${params.toString()}`
+}
+
 const captchaPayload = ref<CaptchaPayload>({})
 const turnstileToken = ref('')
 const imageCaptchaRef = ref<InstanceType<typeof ImageCaptcha> | null>(null)
@@ -603,6 +663,11 @@ onMounted(async () => {
   const win = window as Window & Record<string, any>
   win[telegramCallbackName] = handleTelegramAuth
   renderTelegramWidget()
+  void loadDiscordConfig()
+
+  if (route.query.discord_2fa === '1') {
+    info.value = t('auth.login.discord2faHint')
+  }
 
   const reason = typeof route.query.reason === 'string' ? route.query.reason : ''
   if (reason === 'password_changed') {

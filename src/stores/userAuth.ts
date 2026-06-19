@@ -139,6 +139,16 @@ export const useUserAuthStore = defineStore('user-auth', () => {
         }
     }
 
+    const discordLogin = async (code: string) => {
+        loading.value = true
+        try {
+            const response = await userAuthAPI.discordLogin({ code })
+            return handleLoginResponse(response.data.data)
+        } finally {
+            loading.value = false
+        }
+    }
+
     const forgotPassword = async (payload: any) => {
         loading.value = true
         try {
@@ -181,6 +191,7 @@ export const useUserAuthStore = defineStore('user-auth', () => {
         clearChallenge,
         telegramLogin,
         telegramMiniAppLogin,
+        discordLogin,
         forgotPassword,
         syncUserProfile,
         logout,
