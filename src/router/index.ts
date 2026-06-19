@@ -283,6 +283,12 @@ const router = createRouter({
             meta: { userGuest: true }
         },
         {
+            path: '/auth/discord/callback',
+            name: 'user-discord-callback',
+            component: () => import('../views/auth/DiscordCallback.vue'),
+            meta: { userGuest: true }
+        },
+        {
             path: '/:pathMatch(.*)*',
             name: 'not-found',
             component: () => import('../views/NotFound.vue'),
